@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aetheria: Blade Mastery RPG</title>
+  <style>
+    :root { --bg: #121214; --panel: #1e1e24; --accent: #ff9800; --text: #e0e0e0; }
+    body { background: var(--bg); color: var(--text); font-family: monospace; margin: 0; padding: 20px; }
+    .container { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    .panel { background: var(--panel); border: 2px solid #333; padding: 15px; border-radius: 8px; }
+    .full-width { grid-column: 1 / -1; }
+    button { background: #2a2a35; color: #fff; border: 1px solid var(--accent); padding: 8px 12px; margin: 4px; cursor: pointer; border-radius: 4px; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; border-color: #555; }
+    button:hover:not(:disabled) { background: var(--accent); color: #000; }
+    .progress-bar { background: #333; height: 16px; border-radius: 8px; overflow: hidden; margin: 4px 0; }
+    .progress-fill { background: var(--accent); height: 100%; width: 0%; transition: width 0.2s; }
+    .log { height: 120px; overflow-y: auto; background: #000; padding: 8px; font-size: 12px; border: 1px solid #333; }
+    .grid-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+    .card { background: #151518; padding: 10px; border: 1px solid #444; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Player Stats -->
+  <div class="panel">
+    <h3>hero status</h3>
+    <p>Level: <span id="p-lvl">1</span> | XP: <span id="p-xp">0</span>/<span id="p-max-xp">100</span></p>
+    <p>HP: <span id="p-hp">100</span> / <span id="p-max-hp">100</span></p>
+    <div class="progress-bar"><div id="hp-bar" class="progress-fill" style="background:#e53935;"></div></div>
+    <p>Gold: <span id="p-gold">0</span> | Kills: <span id="p-kills">0</span></p>
+    <p>Equipped Weapon: <b id="p-weapon">Novice Shortsword</b></p>
+    <p>Mastery: <span id="p-mastery">0</span>%</p>
+    <div class="progress-bar"><div id="mastery-bar" class="progress-fill"></div></div>
+  </div>
+
+  <!-- Combat Zone -->
+  <div class="panel">
+    <h3>target enemy</h3>
+    <p><b id="e-name">Forest Slime</b> (Lvl <span id="e-lvl">1</span>)</p>
+    <p>HP: <span id="e-hp">30</span> / <span id="e-max-hp">30</span></p>
+    <div class="progress-bar"><div id="e-hp-bar" class="progress-fill" style="background:#e53935;"></div></div>
+    <h4>ability slots</h4>
+    <button onclick="useAbility(1)">[1] Quick Slash</button>
+    <button onclick="useAbility(2)">[2] Heavy Strike</button>
+    <button onclick="useAbility(3)">[3] Guard & Heal</button>
+    <button id="skill-4" onclick="useAbility(4)" disabled>[4] LOCKED (Requires 100% Mastery)</button>
+  </div>
+
+  <!-- Combat Log -->
+  <div class="panel full-width">
+    <h3>combat log</h3>
+    <div id="log" class="log"></div>
+  </div>
+
+  <!-- Inventory & Acquisition -->
+  <div class="panel full-width">
+    <h3>arsenal & achievements</h3>
+    <div class="grid-list" id="weapon-list"></div>
+  </div>
+</div>
+
+<script>
+const weapons = [
+  { id: 'shortsword', name: 'Novice Shortsword', atk: 8, mastery: 0, unlocked: true, cost: 0, desc: 'Starter blade.', skill4: 'Blade Hurricane (Triple Hit)' },
+  { id: 'rust_hammer', name: 'Rusty War Hammer', atk: 20, mastery: 0, unlocked: false, cost: 50, desc: 'Purchase from Armory.', skill4: 'Earthshaker (Stun Attack)' },
+  { id: 'shadow_dagger', name: 'Shadow Dagger', atk: 35, mastery: 0, unlocked: false, reqKills: 10, desc: 'Unlock: Get 10 Kills.', skill4: 'Assassinate (Critical Execute)' },
+  { id: 'sunfire_blade', name: 'Sunfire Katana', atk: 75, mastery: 0, unlocked: false, cost: 300, desc: 'Purchase from Armory.', skill4: 'Solar Nova (Huge Burn Damage)' }
+];
+
+let player = { lvl: 1, xp: 0, maxXp: 100, hp: 100, maxHp: 100, gold: 0, kills: 0, equipped: weapons[0] };
+let enemy = { name: 'Forest Slime', lvl: 1, hp: 30, maxHp: 30, atk: 5, xp: 25, gold: 15 };
+
+function log(msg) {
+  const el = document.getElementById('log');
+  el.innerHTML += `<div>> ${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function updateUI() {
+  document.getElementById('p-lvl').innerText = player.lvl;
+  document.getElementById('p-xp').innerText = player.xp;
+  document.getElementById('p-max-xp').innerText = player.maxXp;
+  document.getElementById('p-hp').innerText = player.hp;
+  document.getElementById('p-max-hp').innerText = player.maxHp;
+  document.getElementById('hp-bar').style.width = (player.hp / player.maxHp * 100) + '%';
+  document.getElementById('p-gold').innerText = player.gold;
+  document.getElementById('p-kills').innerText = player.kills;
+  document.getElementById('p-weapon').innerText = player.equipped.name;
+  document.getElementById('p-mastery').innerText = Math.floor(player.equipped.mastery);
+  document.getElementById('mastery-bar').style.width = player.equipped.mastery + '%';
+
+  document.getElementById('e-name').innerText = enemy.name;
+  document.getElementById('e-lvl').innerText = enemy.lvl;
+  document.getElementById('e-hp').innerText = enemy.hp;
+  document.getElementById('e-max-hp').innerText = enemy.maxHp;
+  document.getElementById('e-hp-bar').style.width = (enemy.hp / enemy.maxHp * 100) + '%';
+
+  const skill4Btn = document.getElementById('skill-4');
+  if (player.equipped.mastery >= 100) {
+    skill4Btn.disabled = false;
+    skill4Btn.innerText = `[4] ${player.equipped.skill4}`;
+  } else {
+    skill4Btn.disabled = true;
+    skill4Btn.innerText = `[4] LOCKED (${Math.floor(player.equipped.mastery)}%/100%)`;
+  }
+
+  renderWeapons();
+}
+
+function renderWeapons() {
+  const list = document.getElementById('weapon-list');
+  list.innerHTML = '';
+  weapons.forEach(w => {
+    // Check Kill Unlocks
+    if (!w.unlocked && w.reqKills && player.kills >= w.reqKills) {
+      w.unlocked = true;
+      log(`UNLOCKED ACQUIRED: ${w.name} via achievement!`);
+    }
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <b>${w.name}</b><br>
+      ATK: +${w.atk} | Mastery: ${Math.floor(w.mastery)}%<br>
+      <small>${w.desc}</small><br>
+    `;
+    
+    if (w.unlocked) {
+      const equipBtn = document.createElement('button');
+      equipBtn.innerText = player.equipped.id === w.id ? 'Equipped' : 'Equip';
+      equipBtn.disabled = player.equipped.id === w.id;
+      equipBtn.onclick = () => { player.equipped = w; updateUI(); };
+      card.appendChild(equipBtn);
+    } else if (w.cost) {
+      const buyBtn = document.createElement('button');
+      buyBtn.innerText = `Buy (${w.cost}G)`;
+      buyBtn.onclick = () => {
+        if (player.gold >= w.cost) {
+          player.gold -= w.cost;
+          w.unlocked = true;
+          log(`Purchased ${w.name}!`);
+          updateUI();
+        } else { log(`Not enough gold for ${w.name}`); }
+      };
+      card.appendChild(buyBtn);
+    } else {
+      card.innerHTML += `<br><small style="color:#888;">Locked</small>`;
+    }
+    list.appendChild(card);
+  });
+}
+
+function useAbility(slot) {
+  if (player.hp <= 0 || enemy.hp <= 0) return;
+  let dmg = player.equipped.atk + (player.lvl * 3);
+  
+  if (slot === 1) { dmg = Math.floor(dmg * 1.0); log(`Used Quick Slash for ${dmg} DMG!`); }
+  if (slot === 2) { dmg = Math.floor(dmg * 1.6); log(`Used Heavy Strike for ${dmg} DMG!`); }
+  if (slot === 3) { 
+    const heal = 20 + (player.lvl * 2);
+    player.hp = Math.min(player.maxHp, player.hp + heal);
+    log(`Guarded and restored ${heal} HP!`);
+    dmg = 0;
+  }
+  if (slot === 4 && player.equipped.mastery >= 100) {
+    dmg = Math.floor(dmg * 3.5);
+    log(`MASTER SKILL: Executed ${player.equipped.skill4} for massive ${dmg} DMG!`);
+  }
+
+  enemy.hp = Math.max(0, enemy.hp - dmg);
+  
+  // Gain Mastery per attack
+  if (player.equipped.mastery < 100) {
+    player.equipped.mastery = Math.min(100, player.equipped.mastery + 4);
+  }
+
+  if (enemy.hp <= 0) {
+    log(`Defeated ${enemy.name}! Earned ${enemy.xp} XP and ${enemy.gold} Gold.`);
+    player.gold += enemy.gold;
+    player.kills++;
+    player.xp += enemy.xp;
+    
+    if (player.xp >= player.maxXp) {
+      player.lvl++;
+      player.xp -= player.maxXp;
+      player.maxXp = Math.floor(player.maxXp * 1.5);
+      player.maxHp += 20;
+      player.hp = player.maxHp;
+      log(`LEVEL UP! Reached Level ${player.lvl}!`);
+    }
+    spawnEnemy();
+  } else {
+    // Enemy Counters
+    const eDmg = Math.max(1, enemy.atk - Math.floor(player.lvl * 0.5));
+    player.hp = Math.max(0, player.hp - eDmg);
+    log(`${enemy.name} attacked you for ${eDmg} DMG!`);
+    
+    if (player.hp <= 0) {
+      log(`You died! Respawning with full health...`);
+      player.hp = player.maxHp;
+      spawnEnemy();
+    }
+  }
+  updateUI();
+}
+
+function spawnEnemy() {
+  const names = ['Forest Slime', 'Skeletal Warrior', 'Dark Cultist', 'Cave Ogre', 'Infernal Golem'];
+  const eIndex = Math.min(names.length - 1, Math.floor(player.kills / 5));
+  const scale = 1 + (player.kills * 0.3);
+  
+  enemy = {
+    name: names[eIndex],
+    lvl: 1 + Math.floor(player.kills / 3),
+    maxHp: Math.floor(30 * scale),
+    hp: Math.floor(30 * scale),
+    atk: Math.floor(5 * scale),
+    xp: Math.floor(25 * scale),
+    gold: Math.floor(15 * scale)
+  };
+}
+
+updateUI();
+log("Welcome to Aetheria! Defeat enemies, buy new weapons, and hit 100% Mastery to unlock the 4th Skill.");
+</script>
+</body>
+</html>
