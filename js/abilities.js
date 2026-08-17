@@ -283,3 +283,35 @@ export const SHOP_ABILITIES = [
     description: "Reduces material costs for crafting all high-tier weapons by 20%."
   }
 ];
+
+import { SHOP_ABILITIES } from './abilities.js';
+import { SaveManager } from './saveManager.js';
+
+/**
+ * Buys an ability from the shop and saves state.
+ * @param {string} abilityId - Unique ID of ability
+ * @param {Object} playerState - Reference to global player state
+ */
+export function buyAbility(abilityId, playerState) {
+  const ability = SHOP_ABILITIES.find(a => a.id === abilityId);
+  if (!ability) return { success: false, message: "Ability not found." };
+
+  playerState.unlockedAbilities = playerState.unlockedAbilities || [];
+  playerState.gold = playerState.gold || 0;
+
+  if (playerState.unlockedAbilities.includes(abilityId)) {
+    return { success: false, message: `${ability.name} is already unlocked!` };
+  }
+
+  if (playerState.gold < ability.cost) {
+    return { success: false, message: `Need ${ability.cost - playerState.gold} more Gold!` };
+  }
+
+  // Deduct Gold & Unlock
+  playerState.gold -= ability.cost;
+  playerState.unlockedAbilities.push(abilityId);
+
+  SaveManager.save(playerState);
+
+  return { success: true, message: `Unlocked ${ability.name}!`, ability };
+}
